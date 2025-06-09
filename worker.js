@@ -85,4 +85,10 @@ async function runLighthouseForPendingUrls() {
 }
 
 // Ejecuta cada 10 segundos
-setInterval(runLighthouseForPendingUrls, 10000);
+async function loop() {
+  await runLighthouseForPendingUrls();
+  setTimeout(loop, 10000); // espera 10s después de terminar
+}
+
+loop(); // inicia
+
