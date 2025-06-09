@@ -1,0 +1,21 @@
+{
+  "name": "lighthouse-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
+    "dotenv": "^16.5.0",
+    "lighthouse": "^12.6.1",
+    "puppeteer": "^24.10.0"
+  }
+}
+
