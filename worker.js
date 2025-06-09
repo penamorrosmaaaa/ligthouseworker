@@ -40,12 +40,18 @@ async function runLighthouseForPendingUrls() {
 
       await browser.close();
 
-      await supabase.from('lighthouse_results').insert([{
-        url,
-        score: result.lhr.categories.performance.score * 100,
-        json: result.report,
-        created_at: new Date().toISOString()
-      }]);
+      await supabase.from('lighthouse_results').insert([
+        {
+          url,
+          performance: result.lhr.categories.performance.score * 100,
+          lcp: result.lhr.audits['largest-contentful-paint']?.numericValue || null,
+          fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
+          cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
+          tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      
 
       await supabase
         .from('lighthouse_queue')
