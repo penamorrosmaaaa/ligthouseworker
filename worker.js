@@ -9,10 +9,12 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 async function runLighthouseForPendingUrls() {
   const { data: queue, error } = await supabase
-    .from('lighthouse_queue')
-    .select('*')
-    .eq('status', 'pending')
-    .limit(1);
+  .from('lighthouse_queue')
+  .update({ status: 'processing', started_at: new Date().toISOString() })
+  .eq('status', 'pending')
+  .select()
+  .limit(1);
+
 
   if (error) {
     console.error('Error fetching queue:', error.message);
