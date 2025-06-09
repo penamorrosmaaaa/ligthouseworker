@@ -11,12 +11,12 @@ const supabase = createClient(
 );
 
 async function runLighthouseForPendingUrls() {
-  // Toma y bloquea una URL en el mismo paso
+  // Toma y bloquea una URL en un solo paso (seguro para múltiples procesos)
   const { data: queue, error } = await supabase
     .from('lighthouse_queue')
     .update({ status: 'processing', started_at: new Date().toISOString() })
     .eq('status', 'pending')
-    .order('id', { ascending: true })  // ✅ requerido por Supabase para usar limit
+    .order('id', { ascending: true })
     .select()
     .limit(1);
 
@@ -52,7 +52,6 @@ async function runLighthouseForPendingUrls() {
 
       await browser.close();
 
-      // Inserta los resultados
       await supabase.from('lighthouse_results').insert([
         {
           url,
@@ -61,12 +60,11 @@ async function runLighthouseForPendingUrls() {
           fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
           cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
           tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
-          json: result.lhr,  // o result.report si prefieres string
+          json: result.lhr,
           created_at: new Date().toISOString()
         }
       ]);
 
-      // Marca como terminado
       await supabase
         .from('lighthouse_queue')
         .update({ status: 'done', finished_at: new Date().toISOString() })
@@ -84,11 +82,10 @@ async function runLighthouseForPendingUrls() {
   }
 }
 
-// Ejecuta cada 10 segundos
+// ✅ Ejecuta una vez y vuelve a intentar después de 10s
 async function loop() {
   await runLighthouseForPendingUrls();
-  setTimeout(loop, 10000); // espera 10s después de terminar
+  setTimeout(loop, 10000); // espera 10s tras terminar antes de correr otra vez
 }
 
-loop(); // inicia
-
+loop(); // 🚀 Inicia
