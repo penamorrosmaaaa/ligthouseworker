@@ -60,10 +60,12 @@ async function runLighthouseForPendingUrls() {
           fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
           cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
           tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
+          si: result.lhr.audits['speed-index']?.numericValue || null, // 👈 AÑADIDO AQUÍ
           json: result.lhr,
           created_at: new Date().toISOString()
         }
       ]);
+      
 
       await supabase
         .from('lighthouse_queue')
