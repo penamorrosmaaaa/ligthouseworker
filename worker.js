@@ -48,6 +48,7 @@ async function runLighthouseForPendingUrls() {
           fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
           cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
           tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
+          json: result.lhr, // o result.report si prefieres el string completo
           created_at: new Date().toISOString(),
         },
       ]);
