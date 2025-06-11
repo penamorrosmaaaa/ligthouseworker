@@ -2,7 +2,6 @@ import lighthouse from 'lighthouse';
 import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ Supabase setup (values embedded directly)
 const supabase = createClient(
   'https://amvikoumsiymrvgxlsog.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmlrb3Vtc2l5bXJ2Z3hsc29nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2MDE4NDYsImV4cCI6MjA2NTE3Nzg0Nn0.GsFEqjceDI36JOsHFr9-nQOSdQ-rlvM1VhoTC6DvLdE'
@@ -17,13 +16,8 @@ async function runLighthouseForPendingUrls() {
     .select()
     .limit(1);
 
-  if (error) {
-    console.error('❌ Error fetching queue:', error.message);
-    return;
-  }
-
-  if (!queue || queue.length === 0) {
-    console.log('⏳ No pending URLs to process.');
+  if (error || !queue || queue.length === 0) {
+    console.log('⏳ No pending URLs.');
     return;
   }
 
@@ -31,7 +25,7 @@ async function runLighthouseForPendingUrls() {
     const url = item.url;
     const id = item.id;
 
-    console.log(`⏳ Starting Lighthouse test for: ${url}`);
+    console.log(`⏳ Running Lighthouse for: ${url}`);
 
     try {
       const browser = await puppeteer.launch({
@@ -49,28 +43,28 @@ async function runLighthouseForPendingUrls() {
 
       await browser.close();
 
-      await supabase.from('lighthouse_results').insert([
-        {
-          url,
-          performance: result.lhr.categories.performance.score * 100,
-          lcp: result.lhr.audits['largest-contentful-paint']?.numericValue || null,
-          fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
-          cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
-          tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
-          si: result.lhr.audits['speed-index']?.numericValue || null,
-          json: result.lhr,
-          created_at: new Date().toISOString()
-        }
-      ]);
+      const audits = result.lhr.audits;
+
+      await supabase.from('lighthouse_results').insert([{
+        url,
+        performance: result.lhr.categories.performance.score * 100,
+        lcp: audits['largest-contentful-paint']?.numericValue || null,
+        fcp: audits['first-contentful-paint']?.numericValue || null,
+        cls: audits['cumulative-layout-shift']?.numericValue || null,
+        tbt: audits['total-blocking-time']?.numericValue || null,
+        si: audits['speed-index']?.numericValue || null,
+        json: result.lhr,
+        created_at: new Date().toISOString()
+      }]);
 
       await supabase
         .from('lighthouse_queue')
         .update({ status: 'done', finished_at: new Date().toISOString() })
         .eq('id', id);
 
-      console.log(`✅ Done: ${url}`);
+      console.log(`✅ Metrics saved for ${url}`);
     } catch (err) {
-      console.error(`❌ Failed: ${url}`, err.message);
+      console.error(`❌ Failed for ${url}:`, err.message);
 
       await supabase
         .from('lighthouse_queue')
@@ -82,7 +76,7 @@ async function runLighthouseForPendingUrls() {
 
 async function loop() {
   await runLighthouseForPendingUrls();
-  setTimeout(loop, 10000); // Retry every 10 seconds
+  setTimeout(loop, 10000); // Repeat every 10s
 }
 
 loop();
