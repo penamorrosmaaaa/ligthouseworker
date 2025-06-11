@@ -1,58 +1,19 @@
+import lighthouse from 'lighthouse';
 import puppeteer from 'puppeteer';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ Supabase client
+dotenv.config();
+
 const supabase = createClient(
-  'https://amvikoumsiymrvgxlsog.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmlrb3Vtc2l5bXJ2Z3hsc29nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2MDE4NDYsImV4cCI6MjA2NTE3Nzg0Nn0.GsFEqjceDI36JOsHFr9-nQOSdQ-rlvM1VhoTC6DvLdE'
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
 );
 
-// ✅ Extraer métricas web-vitals usando puppeteer
-async function extractVitalsFromPage(url) {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-  const page = await browser.newPage();
-
-  console.log(`🌐 Visiting: ${url}`);
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-
-  await page.addScriptTag({
-    url: 'https://unpkg.com/web-vitals@3/dist/web-vitals.iife.js',
-  });
-
-  const vitals = await page.evaluate(() => {
-    return new Promise((resolve) => {
-      const results = {};
-      let count = 0;
-
-      const done = () => {
-        if (++count >= 3) resolve(results);
-      };
-
-      webVitals.getLCP((metric) => {
-        results.lcp = metric.value;
-        done();
-      });
-
-      webVitals.getCLS((metric) => {
-        results.cls = metric.value;
-        done();
-      });
-
-      webVitals.getINP((metric) => {
-        results.inp = metric.value;
-        done();
-      });
-    });
-  });
-
-  await browser.close();
-  return vitals;
-}
-
-// ✅ Procesar la cola de métricas
-async function runWebVitalsQueue() {
+async function runLighthouseForPendingUrls() {
+  // Toma y bloquea una URL en un solo paso (seguro para múltiples procesos)
   const { data: queue, error } = await supabase
-    .from('web_vitals_queue')
+    .from('lighthouse_queue')
     .update({ status: 'processing', started_at: new Date().toISOString() })
     .eq('status', 'pending')
     .order('id', { ascending: true })
@@ -60,53 +21,73 @@ async function runWebVitalsQueue() {
     .limit(1);
 
   if (error) {
-    console.error('❌ Error reading queue:', error.message);
+    console.error('❌ Error fetching queue:', error.message);
     return;
   }
 
   if (!queue || queue.length === 0) {
-    console.log('⏳ No pending URLs.');
+    console.log('⏳ No pending URLs to process.');
     return;
   }
 
   for (const item of queue) {
-    const { url, id } = item;
+    const url = item.url;
+    const id = item.id;
+
+    console.log(`⏳ Starting Lighthouse test for: ${url}`);
 
     try {
-      console.log(`🚀 Processing: ${url}`);
-      const vitals = await extractVitalsFromPage(url);
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox']
+      });
 
-      console.log(`📊 Extracted for ${url} → LCP: ${vitals.lcp} | CLS: ${vitals.cls} | INP: ${vitals.inp}`);
+      const port = new URL(browser.wsEndpoint()).port;
 
-      await supabase.from('web_vitals_results').insert([{
-        url,
-        lcp: vitals.lcp,
-        cls: vitals.cls,
-        inp: vitals.inp,
-        created_at: new Date().toISOString()
-      }]);
+      const result = await lighthouse(url, {
+        port,
+        output: 'json',
+        logLevel: 'info'
+      });
+
+      await browser.close();
+
+      await supabase.from('lighthouse_results').insert([
+        {
+          url,
+          performance: result.lhr.categories.performance.score * 100,
+          lcp: result.lhr.audits['largest-contentful-paint']?.numericValue || null,
+          fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
+          cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
+          tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
+          si: result.lhr.audits['speed-index']?.numericValue || null, // 👈 AÑADIDO AQUÍ
+          json: result.lhr,
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
 
       await supabase
-        .from('web_vitals_queue')
+        .from('lighthouse_queue')
         .update({ status: 'done', finished_at: new Date().toISOString() })
         .eq('id', id);
 
-      console.log(`✅ Saved metrics for ${url}`);
+      console.log(`✅ Done: ${url}`);
     } catch (err) {
-      console.error(`❌ Failed for ${url}: ${err.message}`);
+      console.error(`❌ Failed: ${url}`, err.message);
 
       await supabase
-        .from('web_vitals_queue')
+        .from('lighthouse_queue')
         .update({ status: 'failed', finished_at: new Date().toISOString() })
         .eq('id', id);
     }
   }
 }
 
-// ✅ Bucle cada 10 segundos
+// ✅ Ejecuta una vez y vuelve a intentar después de 10s
 async function loop() {
-  await runWebVitalsQueue();
-  setTimeout(loop, 10000);
+  await runLighthouseForPendingUrls();
+  setTimeout(loop, 10000); // espera 10s tras terminar antes de correr otra vez
 }
 
-loop();
+loop(); // 🚀 Inicia
