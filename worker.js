@@ -1,17 +1,14 @@
 import lighthouse from 'lighthouse';
 import puppeteer from 'puppeteer';
-import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-dotenv.config();
-
+// ✅ Supabase setup (values embedded directly)
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  'https://amvikoumsiymrvgxlsog.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmlrb3Vtc2l5bXJ2Z3hsc29nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2MDE4NDYsImV4cCI6MjA2NTE3Nzg0Nn0.GsFEqjceDI36JOsHFr9-nQOSdQ-rlvM1VhoTC6DvLdE'
 );
 
 async function runLighthouseForPendingUrls() {
-  // Toma y bloquea una URL en un solo paso (seguro para múltiples procesos)
   const { data: queue, error } = await supabase
     .from('lighthouse_queue')
     .update({ status: 'processing', started_at: new Date().toISOString() })
@@ -60,12 +57,11 @@ async function runLighthouseForPendingUrls() {
           fcp: result.lhr.audits['first-contentful-paint']?.numericValue || null,
           cls: result.lhr.audits['cumulative-layout-shift']?.numericValue || null,
           tbt: result.lhr.audits['total-blocking-time']?.numericValue || null,
-          si: result.lhr.audits['speed-index']?.numericValue || null, // 👈 AÑADIDO AQUÍ
+          si: result.lhr.audits['speed-index']?.numericValue || null,
           json: result.lhr,
           created_at: new Date().toISOString()
         }
       ]);
-      
 
       await supabase
         .from('lighthouse_queue')
@@ -84,10 +80,9 @@ async function runLighthouseForPendingUrls() {
   }
 }
 
-// ✅ Ejecuta una vez y vuelve a intentar después de 10s
 async function loop() {
   await runLighthouseForPendingUrls();
-  setTimeout(loop, 10000); // espera 10s tras terminar antes de correr otra vez
+  setTimeout(loop, 10000); // Retry every 10 seconds
 }
 
-loop(); // 🚀 Inicia
+loop();
